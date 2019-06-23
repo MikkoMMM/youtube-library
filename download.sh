@@ -9,11 +9,13 @@
 # Change the following to your liking:
 
 # Where the root directory of your local video library is
-rootdir="$HOME/_katsottavaa"
+rootdir="/mnt/USB/_katsottavaa/_state"
 # What to call to get the playlist's length
 playlistlengthcommand="./playlist-length.py"
 # Where to store the library's state (such as how many videos have been already downloaded in a given playlist)
-statedir="$HOME/_katsottavaa_state"
+statedir="/mnt/USB/_katsottavaa/_state"
+# Symbolic links directly to individual playlists
+playlistsdir="/mnt/USB/_katsottavaa"
 
 
 
@@ -24,7 +26,13 @@ url="${1}"
 infofile=".info"
 
 
-trap cleanquit SIGHUP SIGINT SIGQUIT SIGABRT
+trap cleaninterrupt SIGHUP SIGINT SIGQUIT SIGABRT
+
+# Cleans up and quits.
+cleaninterrupt()
+{
+  cleanup 2
+}
 
 # Cleans up and quits.
 # Argument 1: Exit code
@@ -67,6 +75,8 @@ download () {
                 kdialog --error "Nothing to download. (Requested index to download ${index} is greater than the playlist's length ${playlist_length}.)"
                 cleanquit 1
             fi
+            ln -s "${statedir}/${videodir}" -t "${playlistsdir}" 2>/dev/null
+            ln -s "${infofile}" "${statedir}/${videodir}/info" 2>/dev/null
             update_nextup "${index}"
             howmany="$(kdialog --title "How many?" --inputbox "How many videos to download? Next up: ${nextup}" "1")"
             end=$((index+howmany))
@@ -118,8 +128,8 @@ else
     dir="${rootdir}/${videodir}"
     infofile="${statedir}/${videodir}.info"
     uploaderinfofile="$(dirname "${statedir}/${videodir}")/channelinfo"
+    mkdir -p "${statedir}/${videodir}"
     if [ ! -e "${uploaderinfofile}" ]; then
-        mkdir -p "$(dirname "${statedir}/${videodir}")"
         youtube-dl -s --playlist-items 1 --get-filename -o "%(uploader)s" "${url}" > "${uploaderinfofile}"
     fi
     if [ -e "${infofile}" ]; then
