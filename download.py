@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # -*- coding: utf-8 -*-
 
 """
@@ -152,7 +152,7 @@ def download(playlist_info):
             os.symlink(infofile_loc, quicklink_to_infofile)
 
         entry = entries[index - 1]
-        howmany = int(input("How many videos to download [1]? Next up: " + entry['title'] + '\n') or 1)
+        howmany = int(input("How many videos to download [1]? Next up: " + entry['title'] + '\n') or 1)
         end = index + howmany - 1
 
         if end > playlist_len:

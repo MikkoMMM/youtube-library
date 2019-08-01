@@ -5,16 +5,17 @@ Currently it's built around downloading playlists (in whole or in part). They ar
 
 # Prerequisites
 * youtube-dl
-* bash
 * Python 3
+* Docopt for Python 3
 * A method of user interaction from the following options:
-  * KDialog (tested with KDE Plasma 5)
+  * Console input (if using download.py)
+  * KDialog of KDE (if using download.sh which will be abandoned at some point)
 
 # Usage
-## download.sh
-Let's suppose you wanted to download the "15 second search tips" playlist by Google to your computer. You would then get the playlist's URL and call download.sh like this:
+## download.py
+Let's suppose you wanted to download the "15 second search tips" playlist by Google to your computer. You would then get the playlist's URL and call download.py like this:
 
-    $ ./download.sh "https://www.youtube.com/playlist?list=PLB3A7CCFD7CD5CF09"
+    $ ./download.py "https://www.youtube.com/playlist?list=PLB3A7CCFD7CD5CF09"
     
     === (1/1) Downloading /home/mikko/_katsottavaa/Google/15_second_search_tips/0001_15_second_search_tip_-_Weather.mp4 ===
     WARNING: fi subtitles not available for i6_Xi5H_3Pg
@@ -28,9 +29,12 @@ Next, it will ask you how many videos you want to download. 1 would now refer to
 
 Now the script should download as many videos as you asked for starting from the index you gave it. Unless there's an error, it shouldn't bother you again with popups but it will still output information to bash and a log file.
 
-The download.sh script understands also URLs that are midway through a playlist. For example this would also work:
+The download.py script understands also URLs that are midway through a playlist. For example this would also work:
 
-    ./download.sh "https://www.youtube.com/watch?v=B9MPLboJM4c&t=0s&index=8&list=PLB3A7CCFD7CD5CF09"
+    ./download.py "https://www.youtube.com/watch?v=B9MPLboJM4c&t=0s&index=8&list=PLB3A7CCFD7CD5CF09"
+
+## download.sh
+download.sh works pretty much exactly like download.py. It's the older version of the download script and will be abandoned soon(tm). The major difference is the input method. This one uses KDE's KDialog.
 
 ## check-for-new-videos-in-downloaded-playlists.sh
 As its name suggests, the script will go through all of the playlists in your video library and display what playlist it is referring to, how many videos it has downloaded and the total number of videos in that playlist.
@@ -41,7 +45,3 @@ Usage:
     Google
     15 second search tips
     1 out of 17 downloaded.
-
-# Auxiliary scripts
-## playlist-length.py
-Returns how many videos are in the playlist it is given as an argument
