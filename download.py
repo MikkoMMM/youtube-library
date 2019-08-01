@@ -33,15 +33,15 @@ import pathlib
 
 # Where the root directory of your local video library is
 rootdir = "/mnt/USB/_katsottavaa/_state"
-# What to call to get the playlist's length
-playlistlengthcommand = "./playlist-length.py"
 # Where to store the library's state (such as how many videos have been already downloaded in a given playlist)
 statedir = "/mnt/USB/_katsottavaa/_state"
 # Symbolic links directly to individual playlists
 playlistsdir = "/mnt/USB/_katsottavaa"
 
+
 # The script itself begins now.
-infofile = ".info"
+infofile_loc = ".info"
+videodir = ""
 
 
 class YoutubeDlLogger(object):
@@ -72,6 +72,11 @@ def youtube_dl_hook(d):
 
 
 def get_playlist_info(url):
+    """
+    Use the extract_info method from youtube-dl on a playlist
+    :param url: The playlist's URL
+    :return: The data structure returned by youtube-dl's extract_info
+    """
     ydl_opts = {
         "quiet": True,
         "no_warnings": True
@@ -107,30 +112,71 @@ def get_playlist_destination(url, outtmpl, restrictfilenames):
     return raw_output.rstrip('\n')
 
 
+def download(playlist_info):
+    with open(infofile_loc, 'r+') as infofile:
+        playlist_len = 0
+        if 'entries' in playlist_info:
+            entries = list(playlist_info['entries'])
+            playlist_len = len(entries)
+        else:
+            print("No videos were found in the playlist.")
+            exit(1)
+
+        index = int(infofile.readline().rstrip())
+
+        if index > playlist_len:
+            print("Nothing to download. (Requested index to download " + str(index) +
+                  " is greater than the playlist's length " + str(playlist_len) + ".)")
+            exit(1)
+
+        quicklink_to_playlist = playlistsdir + '/' + youtube_dl.utils.sanitize_filename(playlist_info['title'])
+        if not os.path.exists(quicklink_to_playlist):
+            os.symlink(statedir + '/' + videodir, quicklink_to_playlist)
+        quicklink_to_infofile = statedir + '/' + videodir + "/info"
+        if not os.path.exists(quicklink_to_infofile):
+            os.symlink(infofile_loc, quicklink_to_infofile)
+
+        exit(0)
+
+
 if __name__ == '__main__':
+    """
+    This is where the script's execution starts.
+    It contains things to do prior to downloading.
+    """
     arguments = docopt(__doc__)
     url = arguments['<url>'] or arguments['--url']
 
+    # TODO: The url parameter should also accept a playlist info file and therefore be able to skip this test
     videodir = get_playlist_destination(url, '%(uploader)s/%(playlist)s', True)
     dldir = rootdir + '/' + videodir
-    infofile = statedir + '/' + videodir + ".info"
-    uploaderinfofile = os.path.dirname(statedir + '/' + videodir) + "/channelinfo"
+    infofile_loc = statedir + '/' + videodir + ".info"
+    uploaderinfofile_loc = os.path.dirname(statedir + '/' + videodir) + "/channelinfo"
 
-    # Create the playlist's directory
+    # Create the state directory
     pathlib.Path(statedir + '/' + videodir).mkdir(parents=True, exist_ok=True)
 
     # Get the playlist's entries from youtube-dl
     playlist_info = get_playlist_info(url)
 
-    if 'entries' in playlist_info:
-        entries = list(playlist_info['entries'])
-        playlist_len = len(entries)
-    else:
-        print("No videos were found in the playlist.")
-        exit(1)
-
     # Create the channelinfo file
-    if not os.path.isfile(uploaderinfofile) and 'uploader' in playlist_info:
-        uploaderinfofile_handle = open(uploaderinfofile, 'w')
-        uploaderinfofile_handle.write(youtube_dl.utils.sanitize_filename(playlist_info['uploader']) + '\n')
+    if not os.path.isfile(uploaderinfofile_loc) and 'uploader' in playlist_info:
+        uploaderinfofile_handle = open(uploaderinfofile_loc, 'w')
+        uploaderinfofile_handle.write(playlist_info['uploader'] + '\n')
+        uploaderinfofile_handle.write(playlist_info['uploader_url'] + '\n')
         uploaderinfofile_handle.close()
+
+    if os.path.isfile(infofile_loc):
+        download(playlist_info)
+    else:
+        # The playlist's directory doesn't exist. Create it with some feedback from the user.
+        index = int(input("This is a new playlist. Start downloading from which index? [1] ") or 1)
+
+        # Create the download directory and the playlist info file
+        pathlib.Path(dldir).mkdir(parents=True, exist_ok=True)
+        with open(infofile_loc, 'w') as infofile:
+            infofile.write(str(index) + '\n')
+            infofile.write("https://www.youtube.com/playlist?list=" + playlist_info['id'] + '\n')
+            infofile.write(playlist_info['title'] + '\n')
+
+        download(playlist_info)
