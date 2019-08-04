@@ -29,6 +29,7 @@ import io
 import os
 import pathlib
 from pathlib import Path
+import tempfile
 import shutil
 
 # Change the following to your liking:
@@ -127,6 +128,14 @@ def update_nextup(index, entries):
     return youtube_dl.utils.sanitize_filename(format(index, '04d') + entry['title'] + "%(title)s.%(ext)s", True)
 
 
+def replace_first_line(src_filename, replacement_line):
+    f = open(src_filename, 'r+')
+    with open(src_filename, 'r') as original:
+        first_line, remainder = original.readline(), original.read()
+    with open(src_filename, 'w') as modified:
+        modified.write(replacement_line + '\n' + remainder)
+
+
 def download(playlist_info):
     playlist_len = 0
     if 'entries' in playlist_info:
@@ -139,66 +148,62 @@ def download(playlist_info):
     with open(infofile_loc, 'r') as infofile_read:
         index = int(infofile_read.readline().rstrip())
 
-        if index > playlist_len:
-            print("Nothing to download. (Requested index to download " + str(index) +
-                  " is greater than the playlist's length " + str(playlist_len) + ".)")
-            exit(1)
+    if index > playlist_len:
+        print("Nothing to download. (Requested index to download " + str(index) +
+              " is greater than the playlist's length " + str(playlist_len) + ".)")
+        exit(1)
 
-        quicklink_to_playlist = playlistsdir + '/' + youtube_dl.utils.sanitize_filename(playlist_info['title'], True)
-        if not os.path.exists(quicklink_to_playlist):
-            os.symlink(statedir + '/' + videodir, quicklink_to_playlist)
-        quicklink_to_infofile = statedir + '/' + videodir + "/info"
-        if not os.path.exists(quicklink_to_infofile):
-            os.symlink(infofile_loc, quicklink_to_infofile)
+    quicklink_to_playlist = playlistsdir + '/' + youtube_dl.utils.sanitize_filename(playlist_info['title'], True)
+    if not os.path.exists(quicklink_to_playlist):
+        os.symlink(statedir + '/' + videodir, quicklink_to_playlist)
+    quicklink_to_infofile = statedir + '/' + videodir + "/info"
+    if not os.path.exists(quicklink_to_infofile):
+        os.symlink(infofile_loc, quicklink_to_infofile)
 
-        entry = entries[index - 1]
-        howmany = int(input("How many videos to download [1]? Next up: " + entry['title'] + '\n') or 1)
-        end = index + howmany - 1
+    entry = entries[index - 1]
+    howmany = int(input("How many videos to download [1]? Next up: " + entry['title'] + '\n') or 1)
+    end = index + howmany - 1
 
-        if end > playlist_len:
-            end = playlist_len
-            print("Corrected the end value to the end of the playlist")
-            print()
-        i = index
-        while i <= end:
-            entry = entries[i - 1]
-            print()
-            print("=== (" + str(i) + '/' + str(end) + ") Downloading " + entry['title'] + " ===")
-            ydl_opts = {
-                "restrictfilenames": True,
-                "nooverwrites": True,
-                "writedescription": True,
-                "writethumbnail": True,
-                "writesubtitles": True,
-                "continuedl": True,
-                "noprogress": True,
-                "subtitleslangs": ['en', 'fi'],
-                'outtmpl': tmpdir + '/' + format(i, '04d') + "%(title)s.%(ext)s",
-                'logger': YoutubeDlLogger(),
-                'progress_hooks': [youtube_dl_hook],
-                'postprocessors': [
-                    {'key': 'FFmpegMetadata'},
-                    {'key': 'XAttrMetadata'},
-                    {'key': 'FFmpegSubtitlesConvertor', 'format': 'srt'},
-                    {'key': 'FFmpegEmbedSubtitle'},
-                ],
-            }
-            with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([entry['url']])
+    if end > playlist_len:
+        end = playlist_len
+        print("Corrected the end value to the end of the playlist")
+        print()
+    i = index
+    while i <= end:
+        entry = entries[i - 1]
+        print()
+        print("=== (" + str(i) + '/' + str(end) + ") Downloading " + entry['title'] + " ===")
+        ydl_opts = {
+            "restrictfilenames": True,
+            "nooverwrites": True,
+            "writedescription": True,
+            "writethumbnail": True,
+            "writesubtitles": True,
+            "continuedl": True,
+            "noprogress": True,
+            "subtitleslangs": ['en', 'fi'],
+            'outtmpl': tmpdir + '/' + format(i, '04d') + "%(title)s.%(ext)s",
+            'logger': YoutubeDlLogger(),
+            'progress_hooks': [youtube_dl_hook],
+            'postprocessors': [
+                {'key': 'FFmpegMetadata'},
+                {'key': 'XAttrMetadata'},
+                {'key': 'FFmpegSubtitlesConvertor', 'format': 'srt'},
+                {'key': 'FFmpegEmbedSubtitle'},
+            ],
+        }
+        with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([entry['url']])
 
-            # Move files from the temporary directory
-            for filename in os.listdir(tmpdir):
-                if filename.startswith(format(i, '04d')):
-                    org_fp = os.path.join(tmpdir, filename)
-                    new_fp = os.path.join(dldir, filename)
-                    shutil.move(org_fp, new_fp)
+        # Move files from the temporary directory
+        for filename in os.listdir(tmpdir):
+            if filename.startswith(format(i, '04d')):
+                org_fp = os.path.join(tmpdir, filename)
+                new_fp = os.path.join(dldir, filename)
+                shutil.move(org_fp, new_fp)
 
-            i += 1
-            with open(infofile_loc, 'w') as infofile:
-                infofile.write(str(i))
-                shutil.copyfileobj(infofile_read, infofile)
-
-        exit(0)
+        i += 1
+        replace_first_line(infofile_loc, str(i))
 
 
 if __name__ == '__main__':
