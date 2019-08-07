@@ -140,6 +140,8 @@ def download(playlist_info):
     playlist_len = 0
     if 'entries' in playlist_info:
         entries = list(playlist_info['entries'])
+        # Add a placeholder entry to the beginning so we'll be handling data only in the "human-readable" format
+        entries.insert(0, 0)
         playlist_len = len(entries)
     else:
         print("No videos were found in the playlist.")
@@ -148,9 +150,20 @@ def download(playlist_info):
     with open(infofile_loc, 'r') as infofile_read:
         index = int(infofile_read.readline().rstrip())
 
-    if index > playlist_len:
-        print("Nothing to download. (Requested index to download " + str(index) +
-              " is greater than the playlist's length " + str(playlist_len) + ".)")
+    if index > 0:
+        step = 1
+        if index >= playlist_len:
+            print("Nothing to download. (Requested index to download " + str(index+1) +
+                  " is greater than the playlist's length " + str(playlist_len) + ".)")
+            exit(1)
+    elif index < 0:
+        step = -1
+        if index <= -playlist_len:
+            print("Nothing to download. (Requested index to download " + str(index) +
+                  " is already at the start of the playlist.)")
+            exit(1)
+    else:
+        print("Sorry. Download index 0 currently does nothing.")
         exit(1)
 
     quicklink_to_playlist = playlistsdir + '/' + youtube_dl.utils.sanitize_filename(playlist_info['title'], True)
@@ -160,19 +173,25 @@ def download(playlist_info):
     if not os.path.exists(quicklink_to_infofile):
         os.symlink(infofile_loc, quicklink_to_infofile)
 
-    entry = entries[index - 1]
+    entry = entries[index]
     howmany = int(input("How many videos to download [1]? Next up: " + entry['title'] + '\n') or 1)
-    end = index + howmany - 1
+    end = index + (howmany - 1) * step
 
-    if end > playlist_len:
-        end = playlist_len
+    if end >= playlist_len:
+        end = playlist_len - 1
         print("Corrected the end value to the end of the playlist")
         print()
+    elif end <= -playlist_len:
+        end = -playlist_len + 1
+        print("Corrected the end value to the start of the playlist")
+        print()
+
     i = index
-    while i <= end:
-        entry = entries[i - 1]
+    while (step > 0 and i <= end) or (step < 0 and i >= end):
+        entry = entries[i]
         print()
         print("=== (" + str(i) + '/' + str(end) + ") Downloading " + entry['title'] + " ===")
+        filenamestart = format(abs(i), '04d')
         ydl_opts = {
             "restrictfilenames": True,
             "nooverwrites": True,
@@ -182,7 +201,7 @@ def download(playlist_info):
             "continuedl": True,
             "noprogress": True,
             "subtitleslangs": ['en', 'fi'],
-            'outtmpl': tmpdir + '/' + format(i, '04d') + "%(title)s.%(ext)s",
+            'outtmpl': tmpdir + '/' + filenamestart + "%(title)s.%(ext)s",
             'logger': YoutubeDlLogger(),
             'progress_hooks': [youtube_dl_hook],
             'postprocessors': [
@@ -197,12 +216,12 @@ def download(playlist_info):
 
         # Move files from the temporary directory
         for filename in os.listdir(tmpdir):
-            if filename.startswith(format(i, '04d')):
+            if filename.startswith(filenamestart):
                 org_fp = os.path.join(tmpdir, filename)
                 new_fp = os.path.join(dldir, filename)
                 shutil.move(org_fp, new_fp)
 
-        i += 1
+        i += step
         replace_first_line(infofile_loc, str(i))
 
 
@@ -237,7 +256,8 @@ if __name__ == '__main__':
         download(playlist_info)
     else:
         # The playlist's directory doesn't exist. Create it with some feedback from the user.
-        index = int(input("This is a new playlist. Start downloading from which index? [1] ") or 1)
+        index = int(input("This is a new playlist. Start downloading from which index? \
+Negative values are from the end of the playlist. [1] ") or 1)
 
         # Create the download directory and the playlist info file
         pathlib.Path(dldir).mkdir(parents=True, exist_ok=True)
