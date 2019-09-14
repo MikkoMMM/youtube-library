@@ -29,7 +29,6 @@ import io
 import os
 import pathlib
 from pathlib import Path
-import tempfile
 import shutil
 
 # Change the following to your liking:
@@ -72,8 +71,16 @@ class YoutubeDlLogger(object):
 def youtube_dl_hook(d):
     # Display the percentage downloaded
     if d['status'] == 'downloading':
+        if 'total_bytes' in d:
+            percent = d['downloaded_bytes'] / d['total_bytes']
+        elif 'total_bytes_estimate' in d:
+            percent = d['downloaded_bytes'] / d['total_bytes_estimate']
+        else:
+            percent = 0
+            print("No total byte count available")
+
         # 100.0% of 3.31MiB at 10.97MiB/s ETA 00:00
-        percent = d['downloaded_bytes'] / d['total_bytes']
+
         sys.stdout.write('\r' + "{:.1%}".format(percent))
         sys.stdout.flush()
 
@@ -129,7 +136,6 @@ def update_nextup(index, entries):
 
 
 def replace_first_line(src_filename, replacement_line):
-    f = open(src_filename, 'r+')
     with open(src_filename, 'r') as original:
         first_line, remainder = original.readline(), original.read()
     with open(src_filename, 'w') as modified:
@@ -147,13 +153,20 @@ def download(playlist_info):
         print("No videos were found in the playlist.")
         exit(1)
 
+    quicklink_to_playlist = playlistsdir + '/' + youtube_dl.utils.sanitize_filename(playlist_info['title'], True)
+    if not os.path.exists(quicklink_to_playlist):
+        os.symlink(statedir + '/' + videodir, quicklink_to_playlist)
+    quicklink_to_infofile = statedir + '/' + videodir + "/info"
+    if not os.path.exists(quicklink_to_infofile):
+        os.symlink(infofile_loc, quicklink_to_infofile)
+
     with open(infofile_loc, 'r') as infofile_read:
         index = int(infofile_read.readline().rstrip())
 
     if index > 0:
         step = 1
         if index >= playlist_len:
-            print("Nothing to download. (Requested index to download " + str(index+1) +
+            print("Nothing to download. (Requested index to download " + str(index) +
                   " is greater than the playlist's length " + str(playlist_len) + ".)")
             exit(1)
     elif index < 0:
@@ -165,13 +178,6 @@ def download(playlist_info):
     else:
         print("Sorry. Download index 0 currently does nothing.")
         exit(1)
-
-    quicklink_to_playlist = playlistsdir + '/' + youtube_dl.utils.sanitize_filename(playlist_info['title'], True)
-    if not os.path.exists(quicklink_to_playlist):
-        os.symlink(statedir + '/' + videodir, quicklink_to_playlist)
-    quicklink_to_infofile = statedir + '/' + videodir + "/info"
-    if not os.path.exists(quicklink_to_infofile):
-        os.symlink(infofile_loc, quicklink_to_infofile)
 
     entry = entries[index]
     howmany = int(input("How many videos to download [1]? Next up: " + entry['title'] + '\n') or 1)
@@ -189,9 +195,9 @@ def download(playlist_info):
     i = index
     while (step > 0 and i <= end) or (step < 0 and i >= end):
         entry = entries[i]
-        print()
+        filenamestart = youtube_dl.utils.sanitize_filename(format(abs(i), '04d') + '_' + entry['title'], True)
+
         print("=== (" + str(i) + '/' + str(end) + ") Downloading " + entry['title'] + " ===")
-        filenamestart = format(abs(i), '04d')
         ydl_opts = {
             "restrictfilenames": True,
             "nooverwrites": True,
@@ -201,12 +207,11 @@ def download(playlist_info):
             "continuedl": True,
             "noprogress": True,
             "subtitleslangs": ['en', 'fi'],
-            'outtmpl': tmpdir + '/' + filenamestart + "%(title)s.%(ext)s",
+            'outtmpl': tmpdir + '/' + filenamestart + ".%(ext)s",
             'logger': YoutubeDlLogger(),
             'progress_hooks': [youtube_dl_hook],
             'postprocessors': [
                 {'key': 'FFmpegMetadata'},
-                {'key': 'XAttrMetadata'},
                 {'key': 'FFmpegSubtitlesConvertor', 'format': 'srt'},
                 {'key': 'FFmpegEmbedSubtitle'},
             ],
@@ -233,17 +238,25 @@ if __name__ == '__main__':
     arguments = docopt(__doc__)
     url = arguments['<url>'] or arguments['--url']
 
+    print("Playlist information loading...")
+
+    # Get the playlist's entries from youtube-dl
+    playlist_info = get_playlist_info(url)
+
     # TODO: The url parameter should also accept a playlist info file and therefore be able to skip this test
-    videodir = get_playlist_destination(url, '%(uploader)s/%(playlist)s', True)
+    videodir = youtube_dl.utils.sanitize_filename(playlist_info['uploader'], True) + '/' + \
+        youtube_dl.utils.sanitize_filename(playlist_info['title'], True)
     dldir = rootdir + '/' + videodir
+
+    print("Using temporary directory " + tmpdir)
+    print("Using final directory " + dldir)
+    print()
+
     infofile_loc = statedir + '/' + videodir + ".info"
     uploaderinfofile_loc = os.path.dirname(statedir + '/' + videodir) + "/channelinfo"
 
     # Create the state directory
     pathlib.Path(statedir + '/' + videodir).mkdir(parents=True, exist_ok=True)
-
-    # Get the playlist's entries from youtube-dl
-    playlist_info = get_playlist_info(url)
 
     # Create the channelinfo file
     if not os.path.isfile(uploaderinfofile_loc) and 'uploader' in playlist_info:

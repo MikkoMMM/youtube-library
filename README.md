@@ -9,7 +9,6 @@ Currently it's built around downloading playlists (in whole or in part). They ar
 * Docopt for Python 3
 * A method of user interaction from the following options:
   * Console input (if using download.py)
-  * KDialog of KDE (if using download.sh which will be abandoned at some point)
 
 # Usage
 ## download.py
@@ -32,9 +31,6 @@ Now the script should download as many videos as you asked for starting from the
 The download.py script understands also URLs that are midway through a playlist. For example this would also work:
 
     ./download.py "https://www.youtube.com/watch?v=B9MPLboJM4c&t=0s&index=8&list=PLB3A7CCFD7CD5CF09"
-
-## download.sh
-download.sh works pretty much exactly like download.py. It's the older version of the download script and will be abandoned soon(tm). The major difference is the input method. This one uses KDE's KDialog.
 
 ## check-for-new-videos-in-downloaded-playlists.sh
 As its name suggests, the script will go through all of the playlists in your video library and display what playlist it is referring to, how many videos it has downloaded and the total number of videos in that playlist.
