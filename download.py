@@ -56,6 +56,8 @@ class YoutubeDlLogger(object):
 
     def debug(self, msg):
         with open(logfile, "a") as log:
+            if msg.startswith("[ffmpeg] Merg"):
+                print("Merging video and audio")
             log.write(msg + '\n')
 
     def warning(self, msg):
@@ -101,38 +103,6 @@ def get_playlist_info(url):
     }
     with youtube_dl.YoutubeDL(ydl_opts) as ydl:
         return ydl.extract_info(url, process=False)
-
-
-def get_playlist_destination(url, outtmpl, restrictfilenames):
-    """
-    Get where youtube-dl would save the playlist's first item
-    :param url: The URL of the playlist
-    :param outtmpl: The file name template that youtube-dl uses
-    :param restrictfilenames: Whether to sanitize extraneous characters from the file name
-    :return: Path for where the playlist's first video would be downloaded
-    """
-    # Hack: temporarily redirect stdout
-    stdout = sys.stdout
-    sys.stdout = io.StringIO()
-    ydl_opts = {
-        "quiet": True,
-        "no_warnings": True,
-        "restrictfilenames": restrictfilenames,
-        "simulate": True,
-        'outtmpl': outtmpl,
-        'playlist_items': '1',
-        'forcefilename': True,
-    }
-    with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([url])
-    raw_output = sys.stdout.getvalue()
-    sys.stdout = stdout
-    return raw_output.rstrip('\n')
-
-
-def update_nextup(index, entries):
-    entry = entries[index-1]
-    return youtube_dl.utils.sanitize_filename(format(index, '04d') + entry['title'] + "%(title)s.%(ext)s", True)
 
 
 def replace_first_line(src_filename, replacement_line):
@@ -197,7 +167,7 @@ def download(playlist_info):
         entry = entries[i]
         filenamestart = youtube_dl.utils.sanitize_filename(format(abs(i), '04d') + '_' + entry['title'], True)
 
-        print("=== (" + str(i) + '/' + str(end) + ") Downloading " + entry['title'] + " ===")
+        print("\n=== (" + str(i) + '/' + str(end) + ") Downloading " + entry['title'] + " ===")
         ydl_opts = {
             "restrictfilenames": True,
             "nooverwrites": True,
@@ -218,6 +188,15 @@ def download(playlist_info):
         }
         with youtube_dl.YoutubeDL(ydl_opts) as ydl:
             ydl.download([entry['url']])
+
+        descfile = tmpdir + '/' + filenamestart + ".description"
+        with open(descfile, 'r') as original:
+            data = original.read()
+        with open(descfile, 'w') as modified:
+            modified.write("https://www.youtube.com/watch?v=" + entry['url'] + '\n' +
+                           entry['title'] + '\n\n---\n\n' + data)
+
+        print("Moving downloaded files to the final directory")
 
         # Move files from the temporary directory
         for filename in os.listdir(tmpdir):
