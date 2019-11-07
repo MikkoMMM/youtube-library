@@ -117,8 +117,8 @@ def download(playlist_info):
     if 'entries' in playlist_info:
         entries = list(playlist_info['entries'])
         # Add a placeholder entry to the beginning so we'll be handling data only in the "human-readable" format
-        entries.insert(0, 0)
         playlist_len = len(entries)
+        entries.insert(0, 0)
     else:
         print("No videos were found in the playlist.")
         exit(1)
@@ -135,7 +135,7 @@ def download(playlist_info):
 
     if index > 0:
         step = 1
-        if index >= playlist_len:
+        if index > playlist_len:
             print("Nothing to download. (Requested index to download " + str(index) +
                   " is greater than the playlist's length " + str(playlist_len) + ".)")
             exit(1)
@@ -153,8 +153,8 @@ def download(playlist_info):
     howmany = int(input("How many videos to download [1]? Next up: " + entry['title'] + '\n') or 1)
     end = index + (howmany - 1) * step
 
-    if end >= playlist_len:
-        end = playlist_len - 1
+    if end > playlist_len:
+        end = playlist_len
         print("Corrected the end value to the end of the playlist")
         print()
     elif end <= -playlist_len:
@@ -165,9 +165,11 @@ def download(playlist_info):
     i = index
     while (step > 0 and i <= end) or (step < 0 and i >= end):
         entry = entries[i]
+
         filenamestart = youtube_dl.utils.sanitize_filename(format(abs(i), '04d') + '_' + entry['title'], True)
 
         print("\n=== (" + str(i) + '/' + str(end) + ") Downloading " + entry['title'] + " ===")
+        escaped = str.maketrans({"%":  r"%%"})
         ydl_opts = {
             "restrictfilenames": True,
             "nooverwrites": True,
@@ -177,7 +179,7 @@ def download(playlist_info):
             "continuedl": True,
             "noprogress": True,
             "subtitleslangs": ['en', 'fi'],
-            'outtmpl': tmpdir + '/' + filenamestart + ".%(ext)s",
+            'outtmpl': tmpdir + '/' + filenamestart.translate(escaped) + ".%(ext)s",
             'logger': YoutubeDlLogger(),
             'progress_hooks': [youtube_dl_hook],
             'postprocessors': [
@@ -234,22 +236,22 @@ if __name__ == '__main__':
     infofile_loc = statedir + '/' + videodir + ".info"
     uploaderinfofile_loc = os.path.dirname(statedir + '/' + videodir) + "/channelinfo"
 
-    # Create the state directory
-    pathlib.Path(statedir + '/' + videodir).mkdir(parents=True, exist_ok=True)
-
-    # Create the channelinfo file
-    if not os.path.isfile(uploaderinfofile_loc) and 'uploader' in playlist_info:
-        uploaderinfofile_handle = open(uploaderinfofile_loc, 'w')
-        uploaderinfofile_handle.write(playlist_info['uploader'] + '\n')
-        uploaderinfofile_handle.write(playlist_info['uploader_url'] + '\n')
-        uploaderinfofile_handle.close()
-
     if os.path.isfile(infofile_loc):
         download(playlist_info)
     else:
         # The playlist's directory doesn't exist. Create it with some feedback from the user.
         index = int(input("This is a new playlist. Start downloading from which index? \
 Negative values are from the end of the playlist. [1] ") or 1)
+
+        # Create the state directory
+        pathlib.Path(statedir + '/' + videodir).mkdir(parents=True, exist_ok=True)
+
+        # Create the channelinfo file
+        if 'uploader' in playlist_info:
+            uploaderinfofile_handle = open(uploaderinfofile_loc, 'w')
+            uploaderinfofile_handle.write(playlist_info['uploader'] + '\n')
+            uploaderinfofile_handle.write(playlist_info['uploader_url'] + '\n')
+            uploaderinfofile_handle.close()
 
         # Create the download directory and the playlist info file
         pathlib.Path(dldir).mkdir(parents=True, exist_ok=True)
