@@ -30,6 +30,7 @@ import os
 import pathlib
 from pathlib import Path
 import shutil
+import subprocess
 
 # Change the following to your liking:
 
@@ -41,6 +42,10 @@ statedir = "/mnt/USB/_katsottavaa/_state"
 playlistsdir = "/mnt/USB/_katsottavaa"
 # Place to store unfinished videos
 tmpdir = str(Path.home()) + "/tmp"
+# Minimum length of video in minutes to start chopping up
+minlength = 30
+# Chopped up video's segment size in minutes
+segmentsize = 20
 
 
 # The script itself begins now.
@@ -57,6 +62,8 @@ class YoutubeDlLogger(object):
     def debug(self, msg):
         with open(logfile, "a") as log:
             if msg.startswith("[ffmpeg] Merg"):
+                # Store the temporary video file's location for future use
+                replace_second_line(infofile_loc, msg[31:-1])
                 print("Merging video and audio")
             log.write(msg + '\n')
 
@@ -110,6 +117,13 @@ def replace_first_line(src_filename, replacement_line):
         first_line, remainder = original.readline(), original.read()
     with open(src_filename, 'w') as modified:
         modified.write(replacement_line + '\n' + remainder)
+
+
+def replace_second_line(src_filename, replacement_line):
+    with open(src_filename, 'r') as original:
+        first_line, second_line, remainder = original.readline(), original.readline(), original.read()
+    with open(src_filename, 'w') as modified:
+        modified.write(first_line + replacement_line + '\n' + remainder)
 
 
 def download(playlist_info):
@@ -198,6 +212,17 @@ def download(playlist_info):
             modified.write("https://www.youtube.com/watch?v=" + entry['url'] + '\n' +
                            entry['title'] + '\n\n---\n\n' + data)
 
+        with open(infofile_loc, 'r') as fp:
+            first_line, lastvideoloc = fp.readline(), fp.readline().rstrip()
+
+        if os.path.isfile(lastvideoloc):
+            print("Slicing the video up into chunks")
+            segmout = subprocess.run(
+                ["sh", "video-segmenter.sh", "-s", str(segmentsize), "-m", str(minlength), "-r", str(lastvideoloc)],
+                capture_output=True, text=True)
+            print(segmout.stdout)
+            print(segmout.stderr)
+
         print("Moving downloaded files to the final directory")
 
         # Move files from the temporary directory
@@ -212,6 +237,12 @@ def download(playlist_info):
 
 
 if __name__ == '__main__':
+#    segmout = subprocess.run(["sh", "video-segmenter.sh", "-s", str(segmentsize), "-m", str(minlength), "-r", str(lastvideoloc)],
+#                             capture_output=True, text=True)
+#    print(segmout.stdout)
+#    print(segmout.stderr)
+#    sys.exit(0)
+
     """
     This is where the script's execution starts.
     It contains things to do prior to downloading.
@@ -256,7 +287,7 @@ Negative values are from the end of the playlist. [1] ") or 1)
         # Create the download directory and the playlist info file
         pathlib.Path(dldir).mkdir(parents=True, exist_ok=True)
         with open(infofile_loc, 'w') as infofile:
-            infofile.write(str(index) + '\n')
+            infofile.write(str(index) + '\n\n')
             infofile.write("https://www.youtube.com/playlist?list=" + playlist_info['id'] + '\n')
             infofile.write(playlist_info['title'] + '\n')
 

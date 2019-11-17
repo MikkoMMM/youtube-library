@@ -1,5 +1,7 @@
 #!/bin/bash
-#set -x
+set -x
+
+echo "$@"
 
 # Minimum length of video in minutes to start chopping up
 minlength=0
@@ -32,23 +34,9 @@ usage() {
 Usage: $PROGNAME [OPTION]... [VIDEO]...
 Chop VIDEO(s) into multiple files.
 
--s <segmentsize>: MANDATORY. Segment duration. This is into how big of
-                  chunks the video is to be chopped up in.
+-s <segmentsize>: MANDATORY. Segment duration in minutes OR in a format
+                  accepted by ffmpeg's duration syntax
 
-                  ffmpeg accepts the following duration formats:
-
-                  [-][HH:]MM:SS[.m...]
-                  HH expresses the number of hours, MM the number of minutes
-                  for a maximum of 2 digits, and SS the number of seconds for
-                  a maximum of 2 digits. The m at the end expresses decimal
-                  value for SS.
-
-                  or
-
-                  [-]S+[.m...]
-                  S expresses the number of seconds, with the optional decimal
-                  part m.
-                  
                   Note that splitting may not be accurate, unless you force the
                   reference stream key-frames at the given time.
 
@@ -75,7 +63,7 @@ while getopts rvs:m:e: opt; do
   case $opt in
     (s) chunksize=$OPTARG;;
     (m) minlength=$OPTARG;;
-    (r) remove=true;;
+    (r) remove=maybe;;
     (e) extraArgs=$OPTARG;;
     (v) verbose=true;;
     (*) usage
@@ -91,14 +79,28 @@ shift $((OPTIND-1))
 # Segment size not specified
 [ -z "$chunksize" ] && usage
 
-#if ! [[ "$chunksize" =~ ^[0-9:]+$ ]]; then
-#  echo "ERROR: Segment size should be a positive integer denoting the number of minutes per segment."
-#  exit 1
-#fi
+if [[ "$chunksize" =~ ^[0-9]+$ ]]; then
+    chunksize="${chunksize}:00"
+fi
 
 for video in "${@}"
 do
-    extension=$([[ "$video" = *.* ]] && echo ".${video##*.}" || echo '')
-    basename="${video%.*}"
-    ffmpeg -i "${video}" -c copy -map 0 -segment_time "$chunksize" -f segment "${basename}_%03d${extension}"
+    videolength=$(ffprobe -i "${video}" -show_entries format=duration -v quiet -of csv="p=0")
+    if (( $(echo "$minlength <= 0 || $videolength / 60 >= $minlength" |bc -l) )); then
+        extension=$([[ "$video" = *.* ]] && echo ".${video##*.}" || echo '')
+        basename="${video%.*}"
+        ffmpeg -i "${video}" -c copy -map 0 -segment_time "$chunksize" -f segment -loglevel warning "${basename}_%03d${extension}"
+        exit_code=$?
+
+        if [ "$exit_code" -ne 0 ]; then
+            >&2 echo "Error ${exit_code} when running command: ffmpeg -i ${video} -c copy -map 0 -segment_time $chunksize -f segment -loglevel warning ${basename}_%03d${extension}"
+            exit "$exit_code"
+        fi
+        if [ "$remove" = maybe ] ; then
+            remove=true
+        fi
+    fi
 done
+if [ "$remove" = true ] ; then
+    rm "$video"
+fi
