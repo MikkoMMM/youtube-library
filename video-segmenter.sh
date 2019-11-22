@@ -1,7 +1,5 @@
 #!/bin/bash
-set -x
-
-echo "$@"
+#set -x
 
 # Minimum length of video in minutes to start chopping up
 minlength=0

@@ -9,14 +9,27 @@ quotation marks) and starts downloading it from an index the user can then
 provide or from where it left off previously. The downloads go into a directory
 hierarchy (a "video library").
 
+The defaults (such as where to download, the temporary directory used, and the options for chopping videos)
+are currently hardcoded and can only be modified by modifying the download script itself. Sorry for the inconvenience.
+
 Usage:
-  progname <url>
-  progname --url=<url>
+  progname [options] <url>
+  progname [options] --url=<url>
   progname -h --help
 
 Options:
-  -h --help          Show this screen.
-  --url=<url>        The URL of a playlist to download
+  -h --help                  Show this screen
+  --url=<url>                The URL of a playlist to download
+  --notmp                    Download directly to the the final destination
+  --nomove                   The "opposite" of the above: do not move files from the temporary directory
+  --chopafter=<duration>     Minimum length of video in minutes to start chopping up.
+                             Alternatively, ffmpeg's duration syntax can be used instead of minutes.
+                             The default is 30 minutes.
+                             If set to <=0, the functionality is disabled.
+  --choplength=<duration>    Chopped up video's segment size in minutes.
+                             Alternatively, ffmpeg's duration syntax can be used instead of minutes.
+                             The default is 20 minutes.
+                             If set to <=0, the functionality is disabled.
 
 """
 
@@ -34,18 +47,19 @@ import subprocess
 
 # Change the following to your liking:
 
-# Where the root directory of your local video library is
+# Where the root directory for storing finished downloads is
+# The final location for the videos is under rootdir in a directory hierarchy "uploader/playlistname"
 rootdir = "/mnt/USB/_katsottavaa/_state"
 # Where to store the library's state (such as how many videos have been already downloaded in a given playlist)
 statedir = "/mnt/USB/_katsottavaa/_state"
-# Symbolic links directly to individual playlists
-playlistsdir = "/mnt/USB/_katsottavaa"
-# Place to store unfinished videos
+# Symbolic links directly to individual playlists reside here
+linkdir = "/mnt/USB/_katsottavaa"
+# Place to store unfinished downloads
 tmpdir = str(Path.home()) + "/tmp"
 # Minimum length of video in minutes to start chopping up
-minlength = 30
+chopafter = 30
 # Chopped up video's segment size in minutes
-segmentsize = 20
+choplength = 20
 
 
 # The script itself begins now.
@@ -137,7 +151,7 @@ def download(playlist_info):
         print("No videos were found in the playlist.")
         exit(1)
 
-    quicklink_to_playlist = playlistsdir + '/' + youtube_dl.utils.sanitize_filename(playlist_info['title'], True)
+    quicklink_to_playlist = linkdir + '/' + youtube_dl.utils.sanitize_filename(playlist_info['title'], True)
     if not os.path.exists(quicklink_to_playlist):
         os.symlink(statedir + '/' + videodir, quicklink_to_playlist)
     quicklink_to_infofile = statedir + '/' + videodir + "/info"
@@ -215,40 +229,37 @@ def download(playlist_info):
         with open(infofile_loc, 'r') as fp:
             first_line, lastvideoloc = fp.readline(), fp.readline().rstrip()
 
-        if os.path.isfile(lastvideoloc):
+        if os.path.isfile(lastvideoloc) and chopafter > 0 and choplength > 0:
             print("Slicing the video up into chunks")
             segmout = subprocess.run(
-                ["sh", "video-segmenter.sh", "-s", str(segmentsize), "-m", str(minlength), "-r", str(lastvideoloc)],
+                ["sh", "video-segmenter.sh", "-s", str(choplength), "-m", str(chopafter), "-r", str(lastvideoloc)],
                 capture_output=True, text=True)
             print(segmout.stdout)
             print(segmout.stderr)
 
-        print("Moving downloaded files to the final directory")
-
-        # Move files from the temporary directory
-        for filename in os.listdir(tmpdir):
-            if filename.startswith(filenamestart):
-                org_fp = os.path.join(tmpdir, filename)
-                new_fp = os.path.join(dldir, filename)
-                shutil.move(org_fp, new_fp)
+        if not nomove:
+            # Move files from the temporary directory
+            print("Moving downloaded files to the final directory")
+            for filename in os.listdir(tmpdir):
+                if filename.startswith(filenamestart):
+                    org_fp = os.path.join(tmpdir, filename)
+                    new_fp = os.path.join(dldir, filename)
+                    shutil.move(org_fp, new_fp)
 
         i += step
         replace_first_line(infofile_loc, str(i))
 
 
 if __name__ == '__main__':
-#    segmout = subprocess.run(["sh", "video-segmenter.sh", "-s", str(segmentsize), "-m", str(minlength), "-r", str(lastvideoloc)],
-#                             capture_output=True, text=True)
-#    print(segmout.stdout)
-#    print(segmout.stderr)
-#    sys.exit(0)
-
     """
     This is where the script's execution starts.
     It contains things to do prior to downloading.
     """
     arguments = docopt(__doc__)
     url = arguments['<url>'] or arguments['--url']
+    nomove = arguments['--nomove']
+    chopafter = int(arguments['--chopafter'] or chopafter)
+    choplength = int(arguments['--choplength'] or choplength)
 
     print("Playlist information loading...")
 
@@ -259,6 +270,10 @@ if __name__ == '__main__':
     videodir = youtube_dl.utils.sanitize_filename(playlist_info['uploader'], True) + '/' + \
         youtube_dl.utils.sanitize_filename(playlist_info['title'], True)
     dldir = rootdir + '/' + videodir
+
+    if arguments['--notmp']:
+        tmpdir = dldir
+        nomove = True
 
     print("Using temporary directory " + tmpdir)
     print("Using final directory " + dldir)
