@@ -38,12 +38,12 @@ from __future__ import print_function
 from docopt import docopt
 import youtube_dl
 import sys
-import io
 import os
 import pathlib
 from pathlib import Path
 import shutil
 import subprocess
+import configparser
 
 # Change the following to your liking:
 
@@ -66,7 +66,7 @@ choplength = 20
 infofile_loc = ".info"
 videodir = ""
 logfile = rootdir + "/log.txt"
-
+parser = configparser.ConfigParser()
 
 class YoutubeDlLogger(object):
     """
