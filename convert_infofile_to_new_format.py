@@ -2,6 +2,9 @@
 # -*- coding: utf-8 -*-
 
 """
+This script is for (possible) legacy users only, and will eventually be gotten rid of.
+If you're new to YouTube Library, don't worry about this.
+
 Give the location(s) of playlist info file(s) to this script, and it will
 attempt to convert them to a format understood by configparser.
 """

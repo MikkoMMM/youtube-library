@@ -66,7 +66,7 @@ choplength = 20
 infofile_loc = ".info"
 videodir = ""
 logfile = rootdir + "/log.txt"
-parser = configparser.ConfigParser()
+infofile = configparser.ConfigParser()
 
 class YoutubeDlLogger(object):
     """
@@ -77,7 +77,9 @@ class YoutubeDlLogger(object):
         with open(logfile, "a") as log:
             if msg.startswith("[ffmpeg] Merg"):
                 # Store the temporary video file's location for future use
-                replace_second_line(infofile_loc, msg[31:-1])
+                state["tmpfile"] = msg[31:-1]
+                with open(infofile_loc, 'w') as fp:
+                    infofile.write(fp)
                 print("Merging video and audio")
             log.write(msg + '\n')
 
@@ -126,26 +128,12 @@ def get_playlist_info(url):
         return ydl.extract_info(url, process=False)
 
 
-def replace_first_line(src_filename, replacement_line):
-    with open(src_filename, 'r') as original:
-        first_line, remainder = original.readline(), original.read()
-    with open(src_filename, 'w') as modified:
-        modified.write(replacement_line + '\n' + remainder)
-
-
-def replace_second_line(src_filename, replacement_line):
-    with open(src_filename, 'r') as original:
-        first_line, second_line, remainder = original.readline(), original.readline(), original.read()
-    with open(src_filename, 'w') as modified:
-        modified.write(first_line + replacement_line + '\n' + remainder)
-
-
 def download(playlist_info):
     playlist_len = 0
     if 'entries' in playlist_info:
         entries = list(playlist_info['entries'])
-        # Add a placeholder entry to the beginning so we'll be handling data only in the "human-readable" format
         playlist_len = len(entries)
+        # Add a placeholder entry to the beginning so we'll be handling data only in the "human-readable" format
         entries.insert(0, 0)
     else:
         print("No videos were found in the playlist.")
@@ -158,8 +146,7 @@ def download(playlist_info):
     if not os.path.exists(quicklink_to_infofile):
         os.symlink(infofile_loc, quicklink_to_infofile)
 
-    with open(infofile_loc, 'r') as infofile_read:
-        index = int(infofile_read.readline().rstrip())
+    index = state.getint("nextup")
 
     if index > 0:
         step = 1
@@ -226,13 +213,10 @@ def download(playlist_info):
             modified.write("https://www.youtube.com/watch?v=" + entry['url'] + '\n' +
                            entry['title'] + '\n\n---\n\n' + data)
 
-        with open(infofile_loc, 'r') as fp:
-            first_line, lastvideoloc = fp.readline(), fp.readline().rstrip()
-
-        if os.path.isfile(lastvideoloc) and chopafter > 0 and choplength > 0:
+        if os.path.isfile(state["tmpfile"]) and chopafter > 0 and choplength > 0:
             print("Slicing the video up into chunks")
             segmout = subprocess.run(
-                ["sh", "video-segmenter.sh", "-s", str(choplength), "-m", str(chopafter), "-r", str(lastvideoloc)],
+                ["sh", "video-segmenter.sh", "-s", str(choplength), "-m", str(chopafter), "-r", state["tmpfile"]],
                 capture_output=True, text=True)
             print(segmout.stdout)
             print(segmout.stderr)
@@ -247,7 +231,9 @@ def download(playlist_info):
                     shutil.move(org_fp, new_fp)
 
         i += step
-        replace_first_line(infofile_loc, str(i))
+        state["nextup"] = str(i)
+        with open(infofile_loc, 'w') as fp:
+            infofile.write(fp)
 
 
 if __name__ == '__main__':
@@ -274,8 +260,9 @@ if __name__ == '__main__':
     if arguments['--notmp']:
         tmpdir = dldir
         nomove = True
+    else:
+        print("Using temporary directory " + tmpdir)
 
-    print("Using temporary directory " + tmpdir)
     print("Using final directory " + dldir)
     print()
 
@@ -283,6 +270,8 @@ if __name__ == '__main__':
     uploaderinfofile_loc = os.path.dirname(statedir + '/' + videodir) + "/channelinfo"
 
     if os.path.isfile(infofile_loc):
+        infofile.read(infofile_loc)
+        state = infofile["State"]
         download(playlist_info)
     else:
         # The playlist's directory doesn't exist. Create it with some feedback from the user.
@@ -301,9 +290,13 @@ Negative values are from the end of the playlist. [1] ") or 1)
 
         # Create the download directory and the playlist info file
         pathlib.Path(dldir).mkdir(parents=True, exist_ok=True)
-        with open(infofile_loc, 'w') as infofile:
-            infofile.write(str(index) + '\n\n')
-            infofile.write("https://www.youtube.com/playlist?list=" + playlist_info['id'] + '\n')
-            infofile.write(playlist_info['title'] + '\n')
+        infofile.add_section('State')
+        state = infofile["State"]
+        state["nextup"] = str(index)
+        state["url"] = "https://www.youtube.com/playlist?list=" + playlist_info['id']
+        state["title"] = playlist_info['title']
+        state["tmpfile"] = ""
+        with open(infofile_loc, 'w') as fp:
+            infofile.write(fp)
 
         download(playlist_info)
