@@ -57,7 +57,7 @@ linkdir = "/mnt/USB/_katsottavaa"
 # Place to store unfinished downloads
 tmpdir = str(Path.home()) + "/tmp"
 # Minimum length of video in minutes to start chopping up
-chopafter = 30
+chopafter = 27
 # Chopped up video's segment size in minutes
 choplength = 20
 
@@ -139,9 +139,6 @@ def download(playlist_info):
         print("No videos were found in the playlist.")
         exit(1)
 
-    quicklink_to_playlist = linkdir + '/' + youtube_dl.utils.sanitize_filename(playlist_info['title'], True)
-    if not os.path.exists(quicklink_to_playlist):
-        os.symlink(statedir + '/' + videodir, quicklink_to_playlist)
     quicklink_to_infofile = statedir + '/' + videodir + "/info"
     if not os.path.exists(quicklink_to_infofile):
         os.symlink(infofile_loc, quicklink_to_infofile)
@@ -156,7 +153,7 @@ def download(playlist_info):
             exit(1)
     elif index < 0:
         step = -1
-        if index <= -playlist_len:
+        if index < -playlist_len:
             print("Nothing to download. (Requested index to download " + str(index) +
                   " is already at the start of the playlist.)")
             exit(1)
@@ -172,7 +169,7 @@ def download(playlist_info):
         end = playlist_len
         print("Corrected the end value to the end of the playlist")
         print()
-    elif end <= -playlist_len:
+    elif end < -playlist_len:
         end = -playlist_len + 1
         print("Corrected the end value to the start of the playlist")
         print()
@@ -298,5 +295,8 @@ Negative values are from the end of the playlist. [1] ") or 1)
         state["tmpfile"] = ""
         with open(infofile_loc, 'w') as fp:
             infofile.write(fp)
+        quicklink_to_playlist = linkdir + '/' + youtube_dl.utils.sanitize_filename(playlist_info['title'], True)
+        if not os.path.exists(quicklink_to_playlist):
+            os.symlink(statedir + '/' + videodir, quicklink_to_playlist)
 
         download(playlist_info)
