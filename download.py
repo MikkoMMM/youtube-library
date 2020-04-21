@@ -60,6 +60,8 @@ tmpdir = str(Path.home()) + "/tmp"
 chopafter = 27
 # Chopped up video's segment size in minutes
 choplength = 20
+# Video quality settings
+dlformat = "bestvideo[height<=1440]+bestaudio/best[height<=1440]"
 
 
 # The script itself begins now.
@@ -170,7 +172,7 @@ def download(playlist_info):
         print("Corrected the end value to the end of the playlist")
         print()
     elif end < -playlist_len:
-        end = -playlist_len + 1
+        end = -playlist_len
         print("Corrected the end value to the start of the playlist")
         print()
 
@@ -181,8 +183,9 @@ def download(playlist_info):
         filenamestart = youtube_dl.utils.sanitize_filename(format(abs(i), '04d') + '_' + entry['title'], True)
 
         print("\n=== (" + str(i) + '/' + str(end) + ") Downloading " + entry['title'] + " ===")
-        escaped = str.maketrans({"%":  r"%%"})
+        escaped = str.maketrans({"%":  r""})
         ydl_opts = {
+            "format": dlformat,
             "restrictfilenames": True,
             "nooverwrites": True,
             "writedescription": True,
