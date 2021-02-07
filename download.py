@@ -19,7 +19,8 @@ Usage:
 
 Options:
   -h --help                  Show this screen
-  --url=<url>                The URL of a playlist to download
+  --url=<url>                The URL of a playlist to download, or the path to the directory that holds
+                             the info file, or the info file itself
   --notmp                    Download directly to the the final destination
   --nomove                   The "opposite" of the above: do not move files from the temporary directory
   --chopafter=<duration>     Minimum length of video in minutes to start chopping up.
@@ -179,11 +180,11 @@ def download(playlist_info):
     i = index
     while (step > 0 and i <= end) or (step < 0 and i >= end):
         entry = entries[i]
+        escaped = str.maketrans({"%":  r""})
 
-        filenamestart = youtube_dl.utils.sanitize_filename(format(abs(i), '04d') + '_' + entry['title'], True)
+        filenamestart = youtube_dl.utils.sanitize_filename(format(abs(i), '04d') + '_' + entry['title'], True).translate(escaped)
 
         print("\n=== (" + str(i) + '/' + str(end) + ") Downloading " + entry['title'] + " ===")
-        escaped = str.maketrans({"%":  r""})
         ydl_opts = {
             "format": dlformat,
             "restrictfilenames": True,
@@ -194,7 +195,7 @@ def download(playlist_info):
             "continuedl": True,
             "noprogress": True,
             "subtitleslangs": ['en', 'fi'],
-            'outtmpl': tmpdir + '/' + filenamestart.translate(escaped) + ".%(ext)s",
+            'outtmpl': tmpdir + '/' + filenamestart + ".%(ext)s",
             'logger': YoutubeDlLogger(),
             'progress_hooks': [youtube_dl_hook],
             'postprocessors': [
@@ -246,11 +247,21 @@ if __name__ == '__main__':
     nomove = arguments['--nomove']
     chopafter = int(arguments['--chopafter'] or chopafter)
     choplength = int(arguments['--choplength'] or choplength)
+    
+    if os.path.isdir(url):
+        infofile.read(url + "/info")
+        state = infofile["State"]
+        url = state["url"]
+    elif os.path.isfile(url):
+        infofile.read(url)
+        state = infofile["State"]
+        url = state["url"]
 
     print("Playlist information loading...")
 
     # Get the playlist's entries from youtube-dl
     playlist_info = get_playlist_info(url)
+    print(playlist_info)
 
     # TODO: The url parameter should also accept a playlist info file and therefore be able to skip this test
     videodir = youtube_dl.utils.sanitize_filename(playlist_info['uploader'], True) + '/' + \
