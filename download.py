@@ -20,7 +20,7 @@ Usage:
 Options:
   -h --help                  Show this screen
   --url=<url>                The URL of a playlist to download, or the path to the directory that holds
-                             the info file, or the info file itself
+                             the playlist info file, or the info file itself
   --notmp                    Download directly to the the final destination
   --nomove                   The "opposite" of the above: do not move files from the temporary directory
   --chopafter=<duration>     Minimum length of video in minutes to start chopping up.
@@ -37,7 +37,7 @@ Options:
 from __future__ import unicode_literals
 from __future__ import print_function
 from docopt import docopt
-import youtube_dl
+import yt_dlp
 import sys
 import os
 import pathlib
@@ -73,12 +73,12 @@ infofile = configparser.ConfigParser()
 
 class YoutubeDlLogger(object):
     """
-    A logger for use  in youtube-dl's options
+    A logger for use  in yt-dlp's options
     """
 
     def debug(self, msg):
         with open(logfile, "a") as log:
-            if msg.startswith("[ffmpeg] Merg"):
+            if msg.startswith("[Merger] Merg"):
                 # Store the temporary video file's location for future use
                 state["tmpfile"] = msg[31:-1]
                 with open(infofile_loc, 'w') as fp:
@@ -96,16 +96,16 @@ class YoutubeDlLogger(object):
         print(msg)
 
 
-def youtube_dl_hook(d):
+def yt_dlp_hook(d):
     # Display the percentage downloaded
     if d['status'] == 'downloading':
-        if 'total_bytes' in d:
+        if 'total_bytes' in d and 'downloaded_bytes' in d and d['total_bytes'] is not None and d['downloaded_bytes'] is not None and d['total_bytes'] > 0:
             percent = d['downloaded_bytes'] / d['total_bytes']
-        elif 'total_bytes_estimate' in d:
+        elif 'total_bytes_estimate' in d and 'downloaded_bytes' in d and d['total_bytes_estimate'] is not None and d['downloaded_bytes'] is not None and d['total_bytes_estimate'] > 0:
             percent = d['downloaded_bytes'] / d['total_bytes_estimate']
         else:
             percent = 0
-            print("No total byte count available")
+            print("No current or total byte count available")
 
         # 100.0% of 3.31MiB at 10.97MiB/s ETA 00:00
 
@@ -119,15 +119,16 @@ def youtube_dl_hook(d):
 
 def get_playlist_info(url):
     """
-    Use the extract_info method from youtube-dl on a playlist
+    Use the extract_info method from yt-dlp on a playlist
     :param url: The playlist's URL
-    :return: The data structure returned by youtube-dl's extract_info
+    :return: The data structure returned by yt-dlp's extract_info
     """
     ydl_opts = {
         "quiet": True,
-        "no_warnings": True
+        "no_warnings": True,
+        "compat_opts": "no-youtube-unavailable-videos"
     }
-    with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         return ydl.extract_info(url, process=False)
 
 
@@ -182,7 +183,7 @@ def download(playlist_info):
         entry = entries[i]
         escaped = str.maketrans({"%":  r""})
 
-        filenamestart = youtube_dl.utils.sanitize_filename(format(abs(i), '04d') + '_' + entry['title'], True).translate(escaped)
+        filenamestart = yt_dlp.utils.sanitize_filename(format(abs(i), '04d') + '_' + entry['title'], True).translate(escaped)
 
         print("\n=== (" + str(i) + '/' + str(end) + ") Downloading " + entry['title'] + " ===")
         ydl_opts = {
@@ -197,22 +198,24 @@ def download(playlist_info):
             "subtitleslangs": ['en', 'fi'],
             'outtmpl': tmpdir + '/' + filenamestart + ".%(ext)s",
             'logger': YoutubeDlLogger(),
-            'progress_hooks': [youtube_dl_hook],
+            'progress_hooks': [yt_dlp_hook],
+            'cookiefile': "/mnt/lvdata/cookie-for-youtube-dl.txt",
             'postprocessors': [
                 {'key': 'FFmpegMetadata'},
                 {'key': 'FFmpegSubtitlesConvertor', 'format': 'srt'},
                 {'key': 'FFmpegEmbedSubtitle'},
             ],
         }
-        with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([entry['url']])
+                #{'key': 'SponsorBlock', 'categories': ['sponsor']},
+                #{'key': 'ModifyChapters', 'remove_sponsor_segments': ['sponsor']}
 
         descfile = tmpdir + '/' + filenamestart + ".description"
         with open(descfile, 'r') as original:
             data = original.read()
         with open(descfile, 'w') as modified:
-            modified.write("https://www.youtube.com/watch?v=" + entry['url'] + '\n' +
-                           entry['title'] + '\n\n---\n\n' + data)
+            modified.write(entry['url'] + '\n' + entry['title'] + '\n\n---\n\n' + data)
 
         if os.path.isfile(state["tmpfile"]) and chopafter > 0 and choplength > 0:
             print("Slicing the video up into chunks")
@@ -259,13 +262,13 @@ if __name__ == '__main__':
 
     print("Playlist information loading...")
 
-    # Get the playlist's entries from youtube-dl
+    # Get the playlist's entries from yt-dlp
     playlist_info = get_playlist_info(url)
     print(playlist_info)
 
     # TODO: The url parameter should also accept a playlist info file and therefore be able to skip this test
-    videodir = youtube_dl.utils.sanitize_filename(playlist_info['uploader'], True) + '/' + \
-        youtube_dl.utils.sanitize_filename(playlist_info['title'], True)
+    videodir = yt_dlp.utils.sanitize_filename(playlist_info['uploader'], True) + '/' + \
+        yt_dlp.utils.sanitize_filename(playlist_info['title'], True)
     dldir = rootdir + '/' + videodir
 
     if arguments['--notmp']:
@@ -309,7 +312,7 @@ Negative values are from the end of the playlist. [1] ") or 1)
         state["tmpfile"] = ""
         with open(infofile_loc, 'w') as fp:
             infofile.write(fp)
-        quicklink_to_playlist = linkdir + '/' + youtube_dl.utils.sanitize_filename(playlist_info['title'], True)
+        quicklink_to_playlist = linkdir + '/' + yt_dlp.utils.sanitize_filename(playlist_info['title'], True)
         if not os.path.exists(quicklink_to_playlist):
             os.symlink(statedir + '/' + videodir, quicklink_to_playlist)
 
