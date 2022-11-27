@@ -23,6 +23,7 @@ Options:
                              the playlist info file, or the info file itself
   --notmp                    Download directly to the the final destination
   --nomove                   The "opposite" of the above: do not move files from the temporary directory
+  --justone                  Download only one video without confirmation
   --chopafter=<duration>     Minimum length of video in minutes to start chopping up.
                              Alternatively, ffmpeg's duration syntax can be used instead of minutes.
                              The default is 30 minutes.
@@ -166,7 +167,10 @@ def download(playlist_info):
         exit(1)
 
     entry = entries[index]
-    howmany = int(input("How many videos to download [1]? Next up: " + entry['title'] + '\n') or 1)
+    if (justone):
+        howmany = 1
+    else:
+        howmany = int(input("How many videos to download [1]? Next up: " + entry['title'] + '\n') or 1)
     end = index + (howmany - 1) * step
 
     if end > playlist_len:
@@ -250,6 +254,7 @@ if __name__ == '__main__':
     nomove = arguments['--nomove']
     chopafter = int(arguments['--chopafter'] or chopafter)
     choplength = int(arguments['--choplength'] or choplength)
+    justone = arguments['--justone']
     
     if os.path.isdir(url):
         infofile.read(url + "/info")
